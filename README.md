@@ -10,8 +10,6 @@
 
 [![ForTheBadge built-by-developers](http://ForTheBadge.com/images/badges/built-by-developers.svg)](https://github.com/Gameye98)  
 
-[![BlackHole Security](assets/gitbhs.svg)](https://github.com/BlackHoleSecurity)
-
 # Orthrus
 Orhtrus is a traffic‑flooding tool.  
 It is a tool whose operation involves spamming or disrupting websites and works well with phishing pages.  
